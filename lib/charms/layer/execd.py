@@ -14,11 +14,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with charm-helpers.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import print_function
+
 # This module may only import from the Python standard library.
 import os
-import sys
 import subprocess
+import sys
 import time
+
 
 '''
 execd/preinstall
@@ -111,8 +114,7 @@ def execd_run(command, execd_dir=None, stop_on_error=True, stderr=None):
             # Logs get the details. We can't use juju-log, as the
             # output may be substantial and exceed command line
             # length limits.
-            print("ERROR ({}) running {}".format(e.returncode, e.cmd),
-                  file=stderr)
+            print("ERROR ({}) running {}".format(e.returncode, e.cmd), file=stderr)
             print("STDOUT<<EOM", file=stderr)
             print(e.output, file=stderr)
             print("EOM", file=stderr)
