@@ -21,29 +21,40 @@ def lsb_release(: )
         DISTRIB_DESCRIPTION="Ubuntu 16.04.2 LTS"
 
     2. For CenTos AND RHEL, read /etc/redhat-release, one string:
-        CentOS release 6.4 (Final)
+        CentOS Linux release 7.3.1611 (Core)
     """
     d = {}
     me = platform.linux_distribution()[0]
     if 'ubuntu' in me.lower():
+        # DISTRIB_ID=Ubuntu
+        # DISTRIB_RELEASE=16.04
+        # DISTRIB_CODENAME=xenial
+        # DISTRIB_DESCRIPTION="Ubuntu 16.04.2 LTS"
         with open('/etc/lsb-release', 'r') as lsb:
             for l in lsb:
                 k, v = l.split('=')
                 d[k.strip()] = v.strip()
     elif 'cent' in me.lower():
-        # http://www.binarytides.com/command-check-centos-version/
-        # TODO: need verify this method reading release info of CentOS/RHEL
-        # file content:
-        #     CentOS release 6.4 (Final)
-        with open('/etc/redhat-release', 'r') as lsb:
-            for l in lsb:
-                if 'centos release' in l.lower():
-                    tmp = l.split(' ')  # split by white space
-                    d['DISTRIB_ID'] = tmp[0]  # CentOS
-                    d['DISTRIB_RELEASE'] = tmp[2]  # 6.4
-                    d['DISTRIB_CODENAME'] = tm[0] + tmp[2]  # CentOS6.4
-                    d['DISTRIB_DESCRIPTIOIN'] = l  # original string
-                    break
+        if os.path.exists('/etc/redhat-release'):
+            # http://www.binarytides.com/command-check-centos-version/
+            # TODO: need verify this method reading release info of CentOS/RHEL
+            # file content:
+            #     CentOS Linux release 7.3.1611 (Core)
+            with open('/etc/redhat-release', 'r') as lsb:
+                for l in lsb:
+                    if 'centos release' in l.lower():
+                        tmp = l.split(' ')  # split by white space
+                        d['DISTRIB_ID'] = tmp[0]  # CentOS
+                        d['DISTRIB_RELEASE'] = tmp[-2]  # 7.3.1611
+                        d['DISTRIB_CODENAME'] = tm[0] + tmp[-22]  # CentOS7.3.1611
+                        d['DISTRIB_DESCRIPTIOIN'] = l  # original string
+                        break
+        # This is a fallback, if /etc/rethat-release doesn't exist
+        else:
+            d['DISTRIB_ID'] = 'CentOS'
+            d['DISTRIB_RELEASE'] = ''  # unknown?
+            d['DISTRIB_CODENAME'] = 'CentOS'
+            d['DISTRIB_DESCRIPTIOIN'] = 'CentOS'
 
     return d
 
@@ -58,6 +69,7 @@ def bootstrap_charm_deps():
     # and the charm itself can actually succeed. This call does nothing
     # unless the operator has created and populated $JUJU_CHARM_DIR/exec.d.
     execd_preinstall()
+
     # ensure that $JUJU_CHARM_DIR/bin is on the path, for helper scripts
     charm_dir = os.environ['JUJU_CHARM_DIR']
     os.environ['PATH'] += ':%s' % os.path.join(charm_dir, 'bin')
@@ -65,9 +77,17 @@ def bootstrap_charm_deps():
     vbin = os.path.join(venv, 'bin')
     vpip = os.path.join(vbin, 'pip')  # system default pip
     vpy = os.path.join(vbin, 'python')
+
+    # ".bootstrapped" is a flag file. If it exists, meaning some other charms
+    # have already done these steps so there is no need to go through
+    # these steps again.
     if os.path.exists('wheelhouse/.bootstrapped'):
         activate_venv()
         return
+
+    # determine host env
+    dist = lsb_release()['DISTRIB_ID'].lower()
+
     # bootstrap wheelhouse
     if os.path.exists('wheelhouse'):
         with open('/root/.pydistutils.cfg', 'w') as fp:
@@ -79,9 +99,8 @@ def bootstrap_charm_deps():
                 "find_links = file://{}/wheelhouse/\n".format(charm_dir),
             ])
 
-        # determine host en
-        me = platform.linux_distribution()[0]
-        if 'ubuntu' in me.lower():
+        # Pre-install packages based on host env.
+        if 'ubuntu' in dist:
             apt_install([
                 'python3-pip',
                 'python3-setuptools',
@@ -89,22 +108,22 @@ def bootstrap_charm_deps():
                 'python3-dev',
             ])
 
-        elif 'cent' in me.lower():
+        elif 'cent' in dist:
             apt_install([
                 'epel-release',
-                'redhat-lsb-core',
                 'python-setuptools',
                 'python-pip',
                 'python-yaml',
                 'python-devel',
             ])
 
+        # include packages defined in layer.yaml
         from charms import layer
         cfg = layer.options('basic')
-        # include packages defined in layer.yaml
         apt_install(cfg.get('packages', []))
-        # if we're using a venv, set it up
-        if cfg.get('use_venv'):
+
+        # If using python virtualenv on Ubuntu host
+        if 'ubuntu' in dist and cfg.get('use_venv'):
             if not os.path.exists(venv):
                 series = lsb_release()['DISTRIB_CODENAME']
                 if series in ('precise', 'trusty'):
@@ -117,19 +136,30 @@ def bootstrap_charm_deps():
                 check_call(cmd)
             os.environ['PATH'] = ':'.join([vbin, os.environ['PATH']])
             pip = vpip
-        else:
-            pip = 'pip3'
-            # save a copy of system pip to prevent `pip3 install -U pip`
-            # from changing it
-            if os.path.exists('/usr/bin/pip'):
-                shutil.copy2('/usr/bin/pip', '/usr/bin/pip.save')
+
+        # If installing python virtualenv on CentOS host
+        elif 'cent' in dist and cfg.get('use_venv'):
+            # TODO: how to install virtualenv in CentOS?
+            pass
+
+        # If NOT using virtualenv
+        elif not cfg_get('use_venv'):
+            if 'ubuntu' in dis:
+                pip = 'pip3'  # Ubuntu using pip3
+                # save a copy of system pip to prevent `pip3 install -U pip`
+                # from changing it
+                if os.path.exists('/usr/bin/pip'):
+                    shutil.copy2('/usr/bin/pip', '/usr/bin/pip.save')
+            elif 'cent' in dist:
+                pip = 'pip'  # CentOS using default pip
+
         # need newer pip, to fix spurious Double Requirement error:
         # https://github.com/pypa/pip/issues/56
-        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse',
-                    'pip'])
+        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse', 'pip'])
+
         # install the rest of the wheelhouse deps
-        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse'] +
-                   glob('wheelhouse/*'))
+        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse'] + glob('wheelhouse/*'))
+
         if not cfg.get('use_venv'):
             # restore system pip to prevent `pip3 install -U pip`
             # from changing it
@@ -137,8 +167,10 @@ def bootstrap_charm_deps():
                 shutil.copy2('/usr/bin/pip.save', '/usr/bin/pip')
                 os.remove('/usr/bin/pip.save')
         os.remove('/root/.pydistutils.cfg')
+
         # flag us as having already bootstrapped so we don't do it again
         open('wheelhouse/.bootstrapped', 'w').close()
+
         # Ensure that the newly bootstrapped libs are available.
         # Note: this only seems to be an issue with namespace packages.
         # Non-namespace-package libs (e.g., charmhelpers) are available
@@ -199,10 +231,23 @@ def apt_install(packages):
     if 'DEBIAN_FRONTEND' not in env:
         env['DEBIAN_FRONTEND'] = 'noninteractive'
 
-    cmd = ['apt-get',
-           '--option=Dpkg::Options::=--force-confold',
-           '--assume-yes',
-           'install']
+    # determine host env
+    dist = lsb_release()['DISTRIB_ID'].lower()
+
+    if 'ubuntu' in dist:
+        pkg_cmd = 'apt-get'
+        say_yes = '--assume-yes'
+        options = ['--option=Dpkg::Options::=--force-confold', ]
+        install_cmd = 'install'
+    elif 'cent' in dist:
+        pkg_cmd = 'yum'
+        say_yes = '--assumeyes'
+        options = []
+        install_cmd = 'install'
+
+    cmd = [install_cmd] + options + [say_yes] + [install_cmd]
+
+    # Try cmd 3 times
     for attempt in range(3):
         try:
             check_call(cmd + packages, env=env)
