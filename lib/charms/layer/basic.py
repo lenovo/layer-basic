@@ -1,20 +1,50 @@
 import os
-import sys
+import platform
 import shutil
+import sys
 from glob import glob
-from subprocess import check_call, CalledProcessError
+from subprocess import CalledProcessError
+from subprocess import check_call
 from time import sleep
 
 from charms.layer.execd import execd_preinstall
 
 
-def lsb_release():
-    """Return /etc/lsb-release in a dict"""
+def lsb_release(: )
+    """Return /etc/lsb-release in a dict
+
+    Based on host env, there are two methods:
+    1. For Ubuntu, read /etc/lsb-release, contents in xenial 16.04 for example:
+        DISTRIB_ID=Ubuntu
+        DISTRIB_RELEASE=16.04
+        DISTRIB_CODENAME=xenial
+        DISTRIB_DESCRIPTION="Ubuntu 16.04.2 LTS"
+
+    2. For CenTos AND RHEL, read /etc/redhat-release, one string:
+        CentOS release 6.4 (Final)
+    """
     d = {}
-    with open('/etc/lsb-release', 'r') as lsb:
-        for l in lsb:
-            k, v = l.split('=')
-            d[k.strip()] = v.strip()
+    me = platform.linux_distribution()[0]
+    if 'ubuntu' in me.lower():
+        with open('/etc/lsb-release', 'r') as lsb:
+            for l in lsb:
+                k, v = l.split('=')
+                d[k.strip()] = v.strip()
+    elif 'cent' in me.lower():
+        # http://www.binarytides.com/command-check-centos-version/
+        # TODO: need verify this method reading release info of CentOS/RHEL
+        # file content:
+        #     CentOS release 6.4 (Final)
+        with open('/etc/redhat-release', 'r') as lsb:
+            for l in lsb:
+                if 'centos release' in l.lower():
+                    tmp = l.split(' ')  # split by white space
+                    d['DISTRIB_ID'] = tmp[0]  # CentOS
+                    d['DISTRIB_RELEASE'] = tmp[2]  # 6.4
+                    d['DISTRIB_CODENAME'] = tm[0] + tmp[2]  # CentOS6.4
+                    d['DISTRIB_DESCRIPTIOIN'] = l  # original string
+                    break
+
     return d
 
 
@@ -33,7 +63,7 @@ def bootstrap_charm_deps():
     os.environ['PATH'] += ':%s' % os.path.join(charm_dir, 'bin')
     venv = os.path.abspath('../.venv')
     vbin = os.path.join(venv, 'bin')
-    vpip = os.path.join(vbin, 'pip')
+    vpip = os.path.join(vbin, 'pip')  # system default pip
     vpy = os.path.join(vbin, 'python')
     if os.path.exists('wheelhouse/.bootstrapped'):
         activate_venv()
@@ -48,12 +78,27 @@ def bootstrap_charm_deps():
                 "allow_hosts = ''\n",
                 "find_links = file://{}/wheelhouse/\n".format(charm_dir),
             ])
-        apt_install([
-            'python3-pip',
-            'python3-setuptools',
-            'python3-yaml',
-            'python3-dev',
-        ])
+
+        # determine host en
+        me = platform.linux_distribution()[0]
+        if 'ubuntu' in me.lower():
+            apt_install([
+                'python3-pip',
+                'python3-setuptools',
+                'python3-yaml',
+                'python3-dev',
+            ])
+
+        elif 'cent' in me.lower():
+            apt_install([
+                'epel-release',
+                'redhat-lsb-core',
+                'python-setuptools',
+                'python-pip',
+                'python-yaml',
+                'python-devel',
+            ])
+
         from charms import layer
         cfg = layer.options('basic')
         # include packages defined in layer.yaml
