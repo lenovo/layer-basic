@@ -10,7 +10,7 @@ from time import sleep
 from charms.layer.execd import execd_preinstall
 
 
-def lsb_release(: )
+def lsb_release():
     """Return /etc/lsb-release in a dict
 
     Based on host env, there are two methods:
@@ -102,6 +102,7 @@ def bootstrap_charm_deps():
         # Pre-install packages based on host env.
         if 'ubuntu' in dist:
             apt_install([
+                'python3', # default python pkg
                 'python3-pip',
                 'python3-setuptools',
                 'python3-yaml',
@@ -143,8 +144,8 @@ def bootstrap_charm_deps():
             pass
 
         # If NOT using virtualenv
-        elif not cfg_get('use_venv'):
-            if 'ubuntu' in dis:
+        elif not cfg.get('use_venv'):
+            if 'ubuntu' in dist:
                 pip = 'pip3'  # Ubuntu using pip3
                 # save a copy of system pip to prevent `pip3 install -U pip`
                 # from changing it
@@ -245,7 +246,7 @@ def apt_install(packages):
         options = []
         install_cmd = 'install'
 
-    cmd = [install_cmd] + options + [say_yes] + [install_cmd]
+    cmd = [pkg_cmd] + options + [say_yes] + [install_cmd]
 
     # Try cmd 3 times
     for attempt in range(3):
