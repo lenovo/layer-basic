@@ -1,0 +1,5 @@
+options:
+  uuid:
+    type: string
+    default: "0000"
+    description: "Instance UUID"
