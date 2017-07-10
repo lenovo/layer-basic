@@ -42,11 +42,11 @@ def lsb_release():
             #     CentOS Linux release 7.3.1611 (Core)
             with open('/etc/redhat-release', 'r') as lsb:
                 for l in lsb:
-                    if 'centos release' in l.lower():
+                    if 'centos' in l.lower():
                         tmp = l.split(' ')  # split by white space
                         d['DISTRIB_ID'] = tmp[0]  # CentOS
                         d['DISTRIB_RELEASE'] = tmp[-2]  # 7.3.1611
-                        d['DISTRIB_CODENAME'] = tm[0] + tmp[-22]  # CentOS7.3.1611
+                        d['DISTRIB_CODENAME'] = tmp[0] + tmp[-2]  # CentOS7.3.1611
                         d['DISTRIB_DESCRIPTIOIN'] = l  # original string
                         break
         # This is a fallback, if /etc/rethat-release doesn't exist
