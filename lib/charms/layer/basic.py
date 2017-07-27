@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import platform
 import shutil
@@ -5,6 +7,7 @@ import sys
 from glob import glob
 from subprocess import CalledProcessError
 from subprocess import check_call
+from subprocess import check_output
 from time import sleep
 
 from charms.layer.execd import execd_preinstall
@@ -101,12 +104,13 @@ def bootstrap_charm_deps():
 
         # Pre-install packages based on host env.
         if 'ubuntu' in dist:
+            # Python27, required by CentOS7, pylxca
             apt_install([
-                'python3', # default python pkg
-                'python3-pip',
-                'python3-setuptools',
-                'python3-yaml',
-                'python3-dev',
+                'python',  # default python pkg
+                'python-pip',
+                'python-setuptools',
+                'python-yaml',
+                'python-dev',
             ])
 
         elif 'cent' in dist:
@@ -146,7 +150,8 @@ def bootstrap_charm_deps():
         # If NOT using virtualenv
         elif not cfg.get('use_venv'):
             if 'ubuntu' in dist:
-                pip = 'pip3'  # Ubuntu using pip3
+                pip = 'pip'  # Ubuntu using pip
+
                 # save a copy of system pip to prevent `pip3 install -U pip`
                 # from changing it
                 if os.path.exists('/usr/bin/pip'):
@@ -159,7 +164,8 @@ def bootstrap_charm_deps():
         check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse', 'pip'])
 
         # install the rest of the wheelhouse deps
-        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse'] + glob('wheelhouse/*'))
+        output = check_output([pip, 'install', '-U', '--no-index', '-f',
+                               'wheelhouse'] + glob('wheelhouse/*'))
 
         if not cfg.get('use_venv'):
             # restore system pip to prevent `pip3 install -U pip`
@@ -176,6 +182,7 @@ def bootstrap_charm_deps():
         # Note: this only seems to be an issue with namespace packages.
         # Non-namespace-package libs (e.g., charmhelpers) are available
         # without having to reload the interpreter. :/
+        sys.path.append('/usr/local/lib/python2.7/dist-packages')
         reload_interpreter(vpy if cfg.get('use_venv') else sys.argv[0])
 
 
