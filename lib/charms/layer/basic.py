@@ -25,6 +25,13 @@ def lsb_release():
 
     2. For CenTos AND RHEL, read /etc/redhat-release, one string:
         CentOS Linux release 7.3.1611 (Core)
+
+    Returns:
+        dict: Dictionary presenting the host OS. Keys are:
+            1. `DISTRIB_ID`: `Ubuntu` or `CentOS`
+            2. `DISTRIB_RELEASE`: eg. `16.04`, `7.3.1611`
+            3. `DISTRIB_CODENAME`: eg. `xenial`, `CentOS7.3.1611`
+            4. `DISTRIB_DESCRIPTION`: eg. `Ubuntu 16.04.2 LTS`
     """
     d = {}
     me = platform.linux_distribution()[0]

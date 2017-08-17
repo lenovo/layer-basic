@@ -1,5 +1,5 @@
 options:
-  uuid:
-    type: string
-    default: "0000"
-    description: "Instance UUID"
+  debug:
+    type: boolean
+    default: False
+    description: "Debug mode"
