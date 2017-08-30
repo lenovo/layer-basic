@@ -1,1 +1,8 @@
-{}
+name: basic layer
+summary: This layer defines capability to install system packages
+maintainer: Feng Xia <fxia1@lenovo.com>
+tags:
+  - uhm
+description: |
+  This is a basic layer supporting system package installation, eg. python
+  and python setup-tools.
