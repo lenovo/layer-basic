@@ -109,11 +109,62 @@ def bootstrap_charm_deps():
                 "find_links = file://{}/wheelhouse/\n".format(charm_dir),
             ])
 
+        # Pre-install packages based on host env.
+        if 'ubuntu' in dist:
+            # Python27, required by CentOS7, pylxca
+            apt_install([
+                'python',  # default python pkg
+                'python-pip',
+                'python-setuptools',
+                'python-yaml',
+                'python-dev',
+            ])
+
+        elif 'cent' in dist:
+            apt_install([
+                'epel-release',
+                'python-setuptools',
+                'python-pip',
+                'python-yaml',
+                'python-devel',
+            ])
+
         # include packages defined in layer.yaml
         from charms import layer
         cfg = layer.options('basic')
         apt_install(cfg.get('packages', []))
-        pip = 'pip'
+
+        # If using python virtualenv on Ubuntu host
+        if 'ubuntu' in dist and cfg.get('use_venv'):
+            if not os.path.exists(venv):
+                series = lsb_release()['DISTRIB_CODENAME']
+                if series in ('precise', 'trusty'):
+                    apt_install(['python-virtualenv'])
+                else:
+                    apt_install(['virtualenv'])
+                cmd = ['virtualenv', '-ppython3', '--never-download', venv]
+                if cfg.get('include_system_packages'):
+                    cmd.append('--system-site-packages')
+                check_call(cmd)
+            os.environ['PATH'] = ':'.join([vbin, os.environ['PATH']])
+            pip = vpip
+
+        # If installing python virtualenv on CentOS host
+        elif 'cent' in dist and cfg.get('use_venv'):
+            # TODO: how to install virtualenv in CentOS?
+            pass
+
+        # If NOT using virtualenv
+        elif not cfg.get('use_venv'):
+            if 'ubuntu' in dist:
+                pip = 'pip'  # Ubuntu using pip
+
+                # save a copy of system pip to prevent `pip3 install -U pip`
+                # from changing it
+                if os.path.exists('/usr/bin/pip'):
+                    shutil.copy2('/usr/bin/pip', '/usr/bin/pip.save')
+            elif 'cent' in dist:
+                pip = 'pip'  # CentOS using default pip
 
         # need newer pip, to fix spurious Double Requirement error:
         # https://github.com/pypa/pip/issues/56
@@ -123,6 +174,12 @@ def bootstrap_charm_deps():
         output = check_output([pip, 'install', '-U', '--no-index', '-f',
                                'wheelhouse'] + glob('wheelhouse/*'))
 
+        if not cfg.get('use_venv'):
+            # restore system pip to prevent `pip3 install -U pip`
+            # from changing it
+            if os.path.exists('/usr/bin/pip.save'):
+                shutil.copy2('/usr/bin/pip.save', '/usr/bin/pip')
+                os.remove('/usr/bin/pip.save')
         os.remove('/root/.pydistutils.cfg')
 
         # flag us as having already bootstrapped so we don't do it again
@@ -134,6 +191,34 @@ def bootstrap_charm_deps():
         # without having to reload the interpreter. :/
         sys.path.append('/usr/local/lib/python2.7/dist-packages')
         reload_interpreter(vpy if cfg.get('use_venv') else sys.argv[0])
+
+
+def activate_venv():
+    """
+    Activate the venv if enabled in ``layer.yaml``.
+
+    This is handled automatically for normal hooks, but actions might
+    need to invoke this manually, using something like:
+
+        # Load modules from $JUJU_CHARM_DIR/lib
+        import sys
+        sys.path.append('lib')
+
+        from charms.layer.basic import activate_venv
+        activate_venv()
+
+    This will ensure that modules installed in the charm's
+    virtual environment are available to the action.
+    """
+    venv = os.path.abspath('../.venv')
+    vbin = os.path.join(venv, 'bin')
+    vpy = os.path.join(vbin, 'python')
+    from charms import layer
+    cfg = layer.options('basic')
+    if cfg.get('use_venv') and '.venv' not in sys.executable:
+        # activate the venv
+        os.environ['PATH'] = ':'.join([vbin, os.environ['PATH']])
+        reload_interpreter(vpy)
 
 
 def reload_interpreter(python):
