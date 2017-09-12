@@ -1,1 +1,3 @@
 pip>=7.0.0,<8.2.0
+charmhelpers
+charms.reactive
