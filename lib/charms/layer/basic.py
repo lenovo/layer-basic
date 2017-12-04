@@ -168,6 +168,8 @@ def bootstrap_charm_deps():
 
         # need newer pip, to fix spurious Double Requirement error:
         # https://github.com/pypa/pip/issues/56
+        check_call([pip, 'install', '-U', 'pip'])
+        check_call([pip, 'install', '-U', '--user', 'setuptools', 'pip'])
         check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse', 'pip'])
 
         # install the rest of the wheelhouse deps
